@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {Script} from "forge-std/Script.sol";
+import {console2} from "forge-std/console2.sol";
 import {AgentPay} from "../contracts/AgentPay.sol";
 
 contract DeployAgentPay is Script {
@@ -11,5 +12,7 @@ contract DeployAgentPay is Script {
         vm.startBroadcast(deployerPrivateKey);
         deployed = new AgentPay();
         vm.stopBroadcast();
+
+        console2.log("AgentPay deployed at", address(deployed));
     }
 }
