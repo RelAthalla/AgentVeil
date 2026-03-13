@@ -1,54 +1,63 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-/// @title AgentPay Shield settlement contract
-/// @notice Stores private intent commitments while settling value on an EVM chain.
+/// @title AgentPay private intent escrow
+/// @notice Locks buyer funds against a private commitment and releases them on proof.
 contract AgentPay {
-    address public immutable owner;
-
-    mapping(bytes32 => bool) public settledIntents;
-
-    event IntentSettled(
-        bytes32 indexed intentHash,
-        address indexed payer,
-        address indexed payee,
-        uint256 amount,
-        bytes32 proofCommitment
-    );
-
-    error InvalidOwner();
-    error InvalidPayee();
-    error InvalidAmount();
-    error IncorrectValue();
-    error IntentAlreadySettled();
-    error TransferFailed();
-
-    constructor(address initialOwner) {
-        if (initialOwner == address(0)) revert InvalidOwner();
-        owner = initialOwner;
+    struct Intent {
+        address buyer;
+        uint256 amount;
+        bytes32 intentHash;
+        bool settled;
     }
 
-    /// @notice Settles a private payment intent without exposing the underlying payload.
-    /// @param intentHash Unique hash that represents the private intent/nullifier.
-    /// @param payee Recipient that receives the payment.
-    /// @param amount Settlement amount in the native token.
-    /// @param proofCommitment Commitment to an off-chain proof verified by the wider stack.
-    function settleIntent(
-        bytes32 intentHash,
-        address payable payee,
+    mapping(bytes32 => Intent) public intents;
+
+    event IntentCreated(bytes32 indexed intentHash, address indexed buyer, uint256 amount);
+    event IntentSettled(
+        bytes32 indexed intentHash,
+        address indexed buyer,
+        address indexed vendor,
         uint256 amount,
-        bytes32 proofCommitment
-    ) external payable {
-        if (settledIntents[intentHash]) revert IntentAlreadySettled();
-        if (payee == address(0)) revert InvalidPayee();
-        if (amount == 0) revert InvalidAmount();
-        if (msg.value != amount) revert IncorrectValue();
+        bytes32 proofHash
+    );
 
-        settledIntents[intentHash] = true;
+    error IntentAlreadyExists();
+    error IntentNotFound();
+    error InvalidAmount();
+    error IntentAlreadySettled();
+    error InvalidProof();
+    error TransferFailed();
 
-        (bool success, ) = payee.call{value: amount}("");
+    /// @notice Creates a private intent commitment and locks native funds in escrow.
+    function createIntent(bytes32 intentHash) external payable {
+        if (msg.value == 0) revert InvalidAmount();
+        if (intents[intentHash].buyer != address(0)) revert IntentAlreadyExists();
+
+        intents[intentHash] = Intent({
+            buyer: msg.sender,
+            amount: msg.value,
+            intentHash: intentHash,
+            settled: false
+        });
+
+        emit IntentCreated(intentHash, msg.sender, msg.value);
+    }
+
+    /// @notice Fulfills an existing private intent by presenting the matching proof hash.
+    /// @dev This starter version compares the supplied proof hash directly to the stored commitment.
+    function fulfillIntent(bytes32 intentHash, bytes32 proofHash) external {
+        Intent storage intent = intents[intentHash];
+
+        if (intent.buyer == address(0)) revert IntentNotFound();
+        if (intent.settled) revert IntentAlreadySettled();
+        if (intent.intentHash != proofHash) revert InvalidProof();
+
+        intent.settled = true;
+
+        (bool success, ) = payable(msg.sender).call{value: intent.amount}("");
         if (!success) revert TransferFailed();
 
-        emit IntentSettled(intentHash, msg.sender, payee, amount, proofCommitment);
+        emit IntentSettled(intentHash, intent.buyer, msg.sender, intent.amount, proofHash);
     }
 }

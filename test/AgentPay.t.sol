@@ -7,40 +7,71 @@ import {AgentPay} from "../contracts/AgentPay.sol";
 contract AgentPayTest is Test {
     AgentPay internal agentPay;
 
-    address internal constant OWNER = address(0xA11CE);
     address payable internal constant VENDOR = payable(address(0xBEEF));
 
     function setUp() public {
         vm.deal(address(this), 10 ether);
-        agentPay = new AgentPay(OWNER);
+        agentPay = new AgentPay();
     }
 
-    function testSetsInitialOwner() public view {
-        assertEq(agentPay.owner(), OWNER, "owner mismatch");
-    }
-
-    function testSettlesPrivateIntentAndTransfersValue() public {
+    function testCreatesIntentAndLocksFunds() public {
         bytes32 intentHash = keccak256("intent-1");
-        bytes32 proofCommitment = keccak256("proof-1");
+        uint256 amount = 1 ether;
+
+        agentPay.createIntent{value: amount}(intentHash);
+
+        (address buyer, uint256 escrowedAmount, bytes32 storedIntentHash, bool settled) =
+            agentPay.intents(intentHash);
+
+        assertEq(buyer, address(this), "buyer mismatch");
+        assertEq(escrowedAmount, amount, "amount mismatch");
+        assertEq(storedIntentHash, intentHash, "intent hash mismatch");
+        assertTrue(!settled, "intent should start unsettled");
+    }
+
+    function testFulfillsIntentAndReleasesFundsToVendor() public {
+        bytes32 intentHash = keccak256("intent-2");
         uint256 amount = 1 ether;
         uint256 balanceBefore = VENDOR.balance;
 
-        agentPay.settleIntent{value: amount}(intentHash, VENDOR, amount, proofCommitment);
+        agentPay.createIntent{value: amount}(intentHash);
 
-        assertTrue(agentPay.settledIntents(intentHash), "intent should be marked settled");
+        vm.prank(VENDOR);
+        agentPay.fulfillIntent(intentHash, intentHash);
+
+        (, uint256 escrowedAmount, , bool settled) = agentPay.intents(intentHash);
+
         assertEq(VENDOR.balance, balanceBefore + amount, "vendor should receive payment");
+        assertEq(escrowedAmount, amount, "stored amount mismatch");
+        assertTrue(settled, "intent should be marked settled");
+    }
+
+    function testRejectsInvalidProofHash() public {
+        bytes32 intentHash = keccak256("intent-3");
+        uint256 amount = 0.5 ether;
+
+        agentPay.createIntent{value: amount}(intentHash);
+
+        vm.prank(VENDOR);
+        (bool success, ) = address(agentPay).call(
+            abi.encodeCall(AgentPay.fulfillIntent, (intentHash, keccak256("wrong-proof")))
+        );
+
+        assertTrue(!success, "invalid proof should fail");
     }
 
     function testRejectsReplayForSameIntentHash() public {
-        bytes32 intentHash = keccak256("intent-2");
-        uint256 amount = 0.5 ether;
+        bytes32 intentHash = keccak256("intent-4");
+        uint256 amount = 0.25 ether;
 
-        agentPay.settleIntent{value: amount}(intentHash, VENDOR, amount, keccak256("proof-a"));
+        agentPay.createIntent{value: amount}(intentHash);
 
-        (bool success, ) = address(agentPay).call{value: amount}(
-            abi.encodeCall(
-                AgentPay.settleIntent, (intentHash, VENDOR, amount, keccak256("proof-b"))
-            )
+        vm.prank(VENDOR);
+        agentPay.fulfillIntent(intentHash, intentHash);
+
+        vm.prank(VENDOR);
+        (bool success, ) = address(agentPay).call(
+            abi.encodeCall(AgentPay.fulfillIntent, (intentHash, intentHash))
         );
 
         assertTrue(!success, "replayed intent should fail");
