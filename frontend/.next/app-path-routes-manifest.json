@@ -1,0 +1,7 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/create-intent/page": "/create-intent",
+  "/page": "/",
+  "/fulfill-intent/page": "/fulfill-intent",
+  "/intent-explorer/page": "/intent-explorer"
+}
