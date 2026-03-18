@@ -76,9 +76,10 @@ def main() -> None:
 
     quoted_price_wei = normalize_price_to_wei(args.price)
     computed_intent_hash = generate_intent_hash(args.service_name, quoted_price_wei, args.nonce)
+    computed_intent_hash_hex = Web3.to_hex(Web3.to_bytes(hexstr=computed_intent_hash))
     provided_intent_hash = Web3.to_hex(Web3.to_bytes(hexstr=args.intent_hash))
 
-    if provided_intent_hash.lower() != computed_intent_hash.lower():
+    if provided_intent_hash.lower() != computed_intent_hash_hex.lower():
         raise SystemExit(
             "Provided intent hash does not match the revealed preimage. Refusing to submit."
         )
