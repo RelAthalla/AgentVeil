@@ -1,79 +1,210 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.34;
+pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {AgentPay} from "../contracts/AgentPay.sol";
+import {SimpleIntentVerifier} from "../contracts/SimpleIntentVerifier.sol";
 
 contract AgentPayTest is Test {
     AgentPay internal agentPay;
+    SimpleIntentVerifier internal verifier;
 
+    address internal constant BUYER = address(0xA11CE);
     address payable internal constant VENDOR = payable(address(0xBEEF));
+    address internal constant OTHER_VENDOR = address(0xCAFE);
+
+    string internal constant SERVICE_NAME = "market-sentiment-feed";
+    string internal constant SECRET_NONCE = "nonce-123";
+    uint256 internal constant PRICE = 1 ether;
+    uint64 internal constant DEADLINE_OFFSET = 1 days;
 
     function setUp() public {
-        vm.deal(address(this), 10 ether);
-        agentPay = new AgentPay();
+        vm.deal(BUYER, 10 ether);
+        vm.deal(VENDOR, 1 ether);
+        vm.deal(OTHER_VENDOR, 1 ether);
+
+        verifier = new SimpleIntentVerifier();
+        agentPay = new AgentPay(address(verifier));
     }
 
     function testCreatesIntentAndLocksFunds() public {
-        bytes32 intentHash = keccak256("intent-1");
-        uint256 amount = 1 ether;
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
-        agentPay.createIntent{value: amount}(intentHash);
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
 
-        (address buyer, uint256 escrowedAmount, bytes32 storedIntentHash, bool settled) =
-            agentPay.intents(intentHash);
-
-        assertEq(buyer, address(this), "buyer mismatch");
-        assertEq(escrowedAmount, amount, "amount mismatch");
-        assertEq(storedIntentHash, intentHash, "intent hash mismatch");
-        assertTrue(!settled, "intent should start unsettled");
+        AgentPay.Intent memory intent = agentPay.getIntent(intentHash);
+        assertEq(intent.buyer, BUYER, "buyer mismatch");
+        assertEq(intent.expectedVendor, VENDOR, "expected vendor mismatch");
+        assertEq(intent.amount, PRICE, "amount mismatch");
+        assertEq(intent.createdAt, uint64(block.timestamp), "createdAt mismatch");
+        assertEq(intent.deadline, deadline, "deadline mismatch");
+        assertEq(intent.intentHash, intentHash, "intent hash mismatch");
+        assertEq(uint256(intent.status), uint256(AgentPay.IntentStatus.Active), "status mismatch");
     }
 
-    function testFulfillsIntentAndReleasesFundsToVendor() public {
-        bytes32 intentHash = keccak256("intent-2");
-        uint256 amount = 1 ether;
-        uint256 balanceBefore = VENDOR.balance;
+    function testRejectsZeroValueIntent() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
-        agentPay.createIntent{value: amount}(intentHash);
-
-        vm.prank(VENDOR);
-        agentPay.fulfillIntent(intentHash, intentHash);
-
-        (, uint256 escrowedAmount, , bool settled) = agentPay.intents(intentHash);
-
-        assertEq(VENDOR.balance, balanceBefore + amount, "vendor should receive payment");
-        assertEq(escrowedAmount, amount, "stored amount mismatch");
-        assertTrue(settled, "intent should be marked settled");
+        vm.prank(BUYER);
+        vm.expectRevert(AgentPay.InvalidAmount.selector);
+        agentPay.createIntent{value: 0}(intentHash, deadline, VENDOR);
     }
 
-    function testRejectsInvalidProofHash() public {
-        bytes32 intentHash = keccak256("intent-3");
-        uint256 amount = 0.5 ether;
+    function testRejectsDuplicateIntentHash() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
-        agentPay.createIntent{value: amount}(intentHash);
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
 
-        vm.prank(VENDOR);
-        (bool success, ) = address(agentPay).call(
-            abi.encodeCall(AgentPay.fulfillIntent, (intentHash, keccak256("wrong-proof")))
-        );
-
-        assertTrue(!success, "invalid proof should fail");
+        vm.prank(BUYER);
+        vm.expectRevert(AgentPay.IntentAlreadyExists.selector);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
     }
 
-    function testRejectsReplayForSameIntentHash() public {
-        bytes32 intentHash = keccak256("intent-4");
-        uint256 amount = 0.25 ether;
+    function testFulfillsIntentAndReleasesFundsToBoundVendor() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
+        uint256 vendorBalanceBefore = VENDOR.balance;
 
-        agentPay.createIntent{value: amount}(intentHash);
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
 
         vm.prank(VENDOR);
-        agentPay.fulfillIntent(intentHash, intentHash);
+        agentPay.fulfillIntent(intentHash, SERVICE_NAME, PRICE, SECRET_NONCE);
+
+        AgentPay.Intent memory intent = agentPay.getIntent(intentHash);
+        assertEq(VENDOR.balance, vendorBalanceBefore + PRICE, "vendor should receive payment");
+        assertEq(intent.amount, 0, "amount should be zero after payout");
+        assertEq(uint256(intent.status), uint256(AgentPay.IntentStatus.Settled), "status mismatch");
+    }
+
+    function testAllowsOpenIntentWhenVendorUnbound() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
+        uint256 vendorBalanceBefore = OTHER_VENDOR.balance;
+
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, address(0));
+
+        vm.prank(OTHER_VENDOR);
+        agentPay.fulfillIntent(intentHash, SERVICE_NAME, PRICE, SECRET_NONCE);
+
+        assertEq(OTHER_VENDOR.balance, vendorBalanceBefore + PRICE, "open intent should pay fulfiller");
+    }
+
+    function testRejectsInvalidProofData() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
+
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
 
         vm.prank(VENDOR);
-        (bool success, ) = address(agentPay).call(
-            abi.encodeCall(AgentPay.fulfillIntent, (intentHash, intentHash))
-        );
+        vm.expectRevert(AgentPay.InvalidProof.selector);
+        agentPay.fulfillIntent(intentHash, SERVICE_NAME, PRICE, "wrong-nonce");
+    }
 
-        assertTrue(!success, "replayed intent should fail");
+    function testRejectsAmountMismatchBetweenEscrowAndProof() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
+
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+
+        vm.prank(VENDOR);
+        vm.expectRevert(AgentPay.AmountMismatch.selector);
+        agentPay.fulfillIntent(intentHash, SERVICE_NAME, PRICE - 1, SECRET_NONCE);
+    }
+
+    function testRejectsWrongVendorWhenVendorIsBound() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
+
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+
+        vm.prank(OTHER_VENDOR);
+        vm.expectRevert(AgentPay.UnauthorizedVendor.selector);
+        agentPay.fulfillIntent(intentHash, SERVICE_NAME, PRICE, SECRET_NONCE);
+    }
+
+    function testRejectsUnknownIntent() public {
+        vm.prank(VENDOR);
+        vm.expectRevert(AgentPay.IntentNotFound.selector);
+        agentPay.fulfillIntent(bytes32(uint256(123)), SERVICE_NAME, PRICE, SECRET_NONCE);
+    }
+
+    function testRefundBeforeDeadlineReverts() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
+
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+
+        vm.prank(BUYER);
+        vm.expectRevert(AgentPay.RefundUnavailable.selector);
+        agentPay.refundIntent(intentHash);
+    }
+
+    function testRefundAfterDeadlineReturnsFunds() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
+        uint256 buyerBalanceBefore = BUYER.balance;
+
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+
+        vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
+
+        vm.prank(BUYER);
+        agentPay.refundIntent(intentHash);
+
+        AgentPay.Intent memory intent = agentPay.getIntent(intentHash);
+        assertEq(BUYER.balance, buyerBalanceBefore, "buyer should recover escrowed funds");
+        assertEq(intent.amount, 0, "amount should be zero after refund");
+        assertEq(uint256(intent.status), uint256(AgentPay.IntentStatus.Refunded), "status mismatch");
+    }
+
+    function testCannotFulfillAfterRefund() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
+
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+
+        vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
+
+        vm.prank(BUYER);
+        agentPay.refundIntent(intentHash);
+
+        vm.prank(VENDOR);
+        vm.expectRevert(AgentPay.IntentNotActive.selector);
+        agentPay.fulfillIntent(intentHash, SERVICE_NAME, PRICE, SECRET_NONCE);
+    }
+
+    function testCannotFulfillAfterDeadline() public {
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
+
+        vm.prank(BUYER);
+        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+
+        vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
+
+        vm.prank(VENDOR);
+        vm.expectRevert(AgentPay.IntentExpired.selector);
+        agentPay.fulfillIntent(intentHash, SERVICE_NAME, PRICE, SECRET_NONCE);
+    }
+
+    function _intentHash(
+        string memory serviceName,
+        uint256 quotedPriceWei,
+        string memory secretNonce
+    ) internal pure returns (bytes32) {
+        return keccak256(abi.encode(serviceName, quotedPriceWei, secretNonce));
     }
 }
