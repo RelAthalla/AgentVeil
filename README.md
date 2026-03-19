@@ -43,12 +43,13 @@ forge test
 
 ## Deploy
 
-Set these environment variables before deployment:
+Deploy the Rust verifier separately first, then set these environment variables before deploying
+`AgentPay`:
 
 ```bash
 export POLKADOT_HUB_RPC_URL=https://your-polkadot-hub-rpc
 export PRIVATE_KEY=0x...
-export INITIAL_OWNER=0x...
+export VERIFIER_ADDRESS=0x...
 ```
 
 Then run:
@@ -61,6 +62,7 @@ forge script scripts/DeployAgentPay.s.sol:DeployAgentPay \
 
 ## Notes
 
-- Solidity is pinned to `0.8.20`.
+- `scripts/DeployAgentPay.s.sol` now attaches `AgentPay` to an already deployed verifier via `VERIFIER_ADDRESS`.
+- `contracts/SimpleIntentVerifier.sol` can still be kept as a local Solidity reference/mock for Foundry tests.
 - `contracts` is configured as the Foundry source directory in `foundry.toml`.
 - `AgentPay.sol` is a starter settlement contract that records private intent hashes and settles native-token payments.

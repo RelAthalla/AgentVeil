@@ -16,6 +16,9 @@ ink_e2e = { version = "6.0.0-beta.1" }
 [lib]
 path = "lib.rs"
 
+[package.metadata.ink-lang]
+abi = "all"
+
 [features]
 default = ["std"]
 std = [
