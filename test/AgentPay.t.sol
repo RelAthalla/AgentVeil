@@ -3,11 +3,22 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {AgentPay} from "../contracts/AgentPay.sol";
-import {SimpleIntentVerifier} from "../contracts/SimpleIntentVerifier.sol";
+import {IIntentVerifier} from "../contracts/IIntentVerifier.sol";
+
+contract MockIntentVerifier is IIntentVerifier {
+    function verify(
+        bytes32 intentHash,
+        string calldata serviceName,
+        uint256 quotedPriceWei,
+        string calldata secretNonce
+    ) external pure returns (bool) {
+        return keccak256(abi.encode(serviceName, quotedPriceWei, secretNonce)) == intentHash;
+    }
+}
 
 contract AgentPayTest is Test {
     AgentPay internal agentPay;
-    SimpleIntentVerifier internal verifier;
+    MockIntentVerifier internal verifier;
 
     address internal constant BUYER = address(0xA11CE);
     address payable internal constant VENDOR = payable(address(0xBEEF));
@@ -23,7 +34,7 @@ contract AgentPayTest is Test {
         vm.deal(VENDOR, 1 ether);
         vm.deal(OTHER_VENDOR, 1 ether);
 
-        verifier = new SimpleIntentVerifier();
+        verifier = new MockIntentVerifier();
         agentPay = new AgentPay(address(verifier));
     }
 

@@ -1,7 +1,0 @@
-{
-  "/_not-found/page": "app/_not-found/page.js",
-  "/create-intent/page": "app/create-intent/page.js",
-  "/page": "app/page.js",
-  "/fulfill-intent/page": "app/fulfill-intent/page.js",
-  "/intent-explorer/page": "app/intent-explorer/page.js"
-}

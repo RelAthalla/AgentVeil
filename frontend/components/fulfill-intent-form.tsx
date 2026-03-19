@@ -3,31 +3,31 @@
 import { useMemo, useState } from "react";
 
 import { useWallet } from "@/components/wallet-provider";
-import { buildProofHash, fulfillIntent } from "@/lib/agentpay";
+import { buildIntentHash, fulfillIntent, toQuotedPriceWei } from "@/lib/agentpay";
 
 const defaultContract = process.env.NEXT_PUBLIC_AGENTPAY_ADDRESS ?? "";
 
 export function FulfillIntentForm() {
-  const { connectWallet, provider } = useWallet();
+  const { connectWallet, signer } = useWallet();
   const [contractAddress, setContractAddress] = useState(defaultContract);
   const [intentHash, setIntentHash] = useState("");
+  const [serviceName, setServiceName] = useState("private-api-access");
+  const [price, setPrice] = useState("0.01");
+  const [nonce, setNonce] = useState("demo-001");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [status, setStatus] = useState("Idle");
   const [error, setError] = useState<string | null>(null);
-
-  const proofHash = useMemo(() => {
-    if (!intentHash) {
+  const recomputedIntentHash = useMemo(() => {
+    if (!serviceName || !price || !nonce) {
       return "";
     }
 
     try {
-      return buildProofHash(intentHash);
+      return buildIntentHash(serviceName, price, nonce);
     } catch {
       return "";
     }
-  }, [intentHash]);
-
-  const proofData = proofHash ? `vendor-proof::${proofHash}` : "";
+  }, [nonce, price, serviceName]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -36,11 +36,17 @@ export function FulfillIntentForm() {
     setStatus("Connecting wallet");
 
     try {
-      const activeProvider = provider ?? (await connectWallet());
-      const signer = await activeProvider.getSigner();
+      const activeSigner = signer ?? (await connectWallet()).getSigner();
 
       setStatus("Awaiting wallet confirmation");
-      const tx = await fulfillIntent(contractAddress, signer, intentHash, proofHash);
+      const tx = await fulfillIntent(
+        contractAddress,
+        await activeSigner,
+        intentHash,
+        serviceName,
+        toQuotedPriceWei(price),
+        nonce,
+      );
 
       setTxHash(tx.hash);
       setStatus("Settlement transaction sent");
@@ -59,8 +65,8 @@ export function FulfillIntentForm() {
         <span className="eyebrow">Vendor Flow</span>
         <h1>Fulfill Intent</h1>
         <p>
-          For the current starter contract, the vendor proves fulfillment by submitting a proof hash
-          that matches the buyer&apos;s original intent hash.
+          The vendor reveals the original preimage so the verifier contract can confirm it matches
+          the buyer&apos;s on-chain commitment hash.
         </p>
 
         <form className="flow-form" onSubmit={handleSubmit}>
@@ -74,14 +80,26 @@ export function FulfillIntentForm() {
             <input value={intentHash} onChange={(event) => setIntentHash(event.target.value)} placeholder="0x..." required />
           </label>
 
-          <div className="output-card">
-            <span>Generated proof data</span>
-            <code>{proofData || "Enter a valid intent hash to derive proof data."}</code>
+          <div className="form-grid two-column">
+            <label>
+              <span>Service name</span>
+              <input value={serviceName} onChange={(event) => setServiceName(event.target.value)} required />
+            </label>
+
+            <label>
+              <span>Nonce</span>
+              <input value={nonce} onChange={(event) => setNonce(event.target.value)} required />
+            </label>
           </div>
 
+          <label>
+            <span>Price in ETH</span>
+            <input value={price} onChange={(event) => setPrice(event.target.value)} inputMode="decimal" required />
+          </label>
+
           <div className="output-card">
-            <span>Proof hash sent to contract</span>
-            <code>{proofHash || "Proof hash will appear here."}</code>
+            <span>Recomputed intent hash</span>
+            <code>{recomputedIntentHash || "Fill the form to derive the revealed preimage hash."}</code>
           </div>
 
           <button className="primary-button" type="submit">

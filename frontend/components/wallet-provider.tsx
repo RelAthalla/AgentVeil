@@ -2,126 +2,97 @@
 
 import {
   BrowserProvider,
+  JsonRpcSigner,
   type Eip1193Provider,
 } from "ethers";
 import {
   createContext,
-  useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from "react";
+import { useConnectModal, useXellarAccount } from "@xellar/kit";
+import { useAccount, useConnectorClient, useDisconnect } from "wagmi";
+import type { Account, Chain, Client, Transport } from "viem";
 
 type WalletContextValue = {
   address: string | null;
   provider: BrowserProvider | null;
+  signer: JsonRpcSigner | null;
   status: "idle" | "connecting" | "connected" | "error";
   error: string | null;
+  authProvider: string | null;
+  userEmail: string | null;
   connectWallet: () => Promise<BrowserProvider>;
+  disconnectWallet: () => void;
 };
-
-type InjectedWallet = Eip1193Provider & {
-  on?: (event: string, listener: (accounts: unknown) => void) => void;
-  removeListener?: (event: string, listener: (accounts: unknown) => void) => void;
-};
-
-declare global {
-  interface Window {
-    ethereum?: InjectedWallet;
-  }
-}
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 
-function getEthereumProvider(): InjectedWallet {
-  if (typeof window === "undefined" || !window.ethereum) {
-    throw new Error("No injected wallet found. Install MetaMask or another EVM wallet.");
-  }
+function clientToProvider(client: Client<Transport, Chain, Account>) {
+  const { chain, transport } = client;
+  const network = {
+    chainId: chain.id,
+    name: chain.name,
+    ensAddress: chain.contracts?.ensRegistry?.address,
+  };
 
-  return window.ethereum;
+  return new BrowserProvider(transport as Eip1193Provider, network);
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [address, setAddress] = useState<string | null>(null);
-  const [provider, setProvider] = useState<BrowserProvider | null>(null);
-  const [status, setStatus] = useState<WalletContextValue["status"]>("idle");
-  const [error, setError] = useState<string | null>(null);
+  const { address, isConnected, isConnecting } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { data: walletClient, error: walletError } = useConnectorClient();
+  const { open } = useConnectModal();
+  const xellarAccount = useXellarAccount();
 
-  const syncKnownAccount = useCallback(async () => {
-    try {
-      const injectedProvider = getEthereumProvider();
-      const browserProvider = new BrowserProvider(injectedProvider);
-      const accounts = (await browserProvider.send("eth_accounts", [])) as string[];
-
-      if (accounts.length > 0) {
-        setProvider(browserProvider);
-        setAddress(accounts[0]);
-        setStatus("connected");
-        setError(null);
-      }
-    } catch {
-      // A disconnected wallet should not break the shell.
-    }
-  }, []);
-
-  useEffect(() => {
-    void syncKnownAccount();
-  }, [syncKnownAccount]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.ethereum) {
-      return;
+  const provider = useMemo(() => {
+    if (!walletClient) {
+      return null;
     }
 
-    const handleAccountsChanged = (accounts: unknown) => {
-      if (!Array.isArray(accounts) || accounts.length === 0) {
-        setAddress(null);
-        setProvider(null);
-        setStatus("idle");
-        return;
-      }
+    return clientToProvider(walletClient);
+  }, [walletClient]);
 
-      setAddress(String(accounts[0]));
-      setStatus("connected");
-      setError(null);
-    };
-
-    const injectedProvider = window.ethereum;
-    injectedProvider.on?.("accountsChanged", handleAccountsChanged);
-
-    return () => {
-      injectedProvider.removeListener?.("accountsChanged", handleAccountsChanged);
-    };
-  }, []);
-
-  const connectWallet = useCallback(async () => {
-    setStatus("connecting");
-    setError(null);
-
-    try {
-      const injectedProvider = getEthereumProvider();
-      const browserProvider = new BrowserProvider(injectedProvider);
-      await browserProvider.send("eth_requestAccounts", []);
-      const signer = await browserProvider.getSigner();
-      const nextAddress = await signer.getAddress();
-
-      setProvider(browserProvider);
-      setAddress(nextAddress);
-      setStatus("connected");
-      return browserProvider;
-    } catch (connectError) {
-      const message = connectError instanceof Error ? connectError.message : "Wallet connection failed.";
-      setStatus("error");
-      setError(message);
-      throw connectError;
+  const signer = useMemo(() => {
+    if (!provider || !walletClient) {
+      return null;
     }
-  }, []);
+
+    return new JsonRpcSigner(provider, walletClient.account.address);
+  }, [provider, walletClient]);
+
+  const connectWallet = async () => {
+    if (!provider) {
+      open();
+      throw new Error("Wallet not connected. Open the Xellar connect modal first.");
+    }
+
+    return provider;
+  };
+
+  const status: WalletContextValue["status"] = isConnecting
+    ? "connecting"
+    : isConnected
+      ? "connected"
+      : walletError
+        ? "error"
+        : "idle";
 
   const value = useMemo(
-    () => ({ address, provider, status, error, connectWallet }),
-    [address, connectWallet, error, provider, status],
+    () => ({
+      address: address ?? null,
+      provider,
+      signer,
+      status,
+      error: walletError?.message ?? null,
+      authProvider: xellarAccount?.provider ?? null,
+      userEmail: xellarAccount?.email ?? null,
+      connectWallet,
+      disconnectWallet: disconnect,
+    }),
+    [address, provider, signer, status, walletError, xellarAccount, disconnect],
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
