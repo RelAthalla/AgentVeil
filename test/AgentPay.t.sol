@@ -223,12 +223,14 @@ contract AgentPayTest is Test {
     }
 
     function testPauseUnpause() public {
-    agentPay.pause();
-    vm.expectRevert(Pausable.EnforcedPause.selector);
-    bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
-    vm.prank(BUYER);
-    agentPay.createIntent{value: PRICE }(intentHash, uint64(block.timestamp + 1 days), address(0));
-    
-    agentPay.unpause();
+        agentPay.pause();
+        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
+        bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+        vm.prank(BUYER);
+        agentPay.createIntent{ value: PRICE }(
+            intentHash, uint64(block.timestamp + 1 days), address(0)
+        );
+
+        agentPay.unpause();
     }
 }
