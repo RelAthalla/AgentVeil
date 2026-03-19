@@ -21,7 +21,7 @@ if (!xellarAppId) {
 }
 
 const config = defaultConfig({
-  appName: "AgentPay Shield",
+  appName: "AgentVeil",
   walletConnectProjectId,
   xellarAppId,
   xellarEnv: xellarEnv === "production" ? "production" : "sandbox",
