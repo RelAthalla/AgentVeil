@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ZeroAddress } from "ethers";
 
 import { useWallet } from "@/components/wallet-provider";
 import { buildIntentHash, createIntent } from "@/lib/agentpay";
@@ -8,11 +9,13 @@ import { buildIntentHash, createIntent } from "@/lib/agentpay";
 const defaultContract = process.env.NEXT_PUBLIC_AGENTPAY_ADDRESS ?? "";
 
 export function CreateIntentForm() {
-  const { connectWallet, provider } = useWallet();
+  const { connectWallet, signer } = useWallet();
   const [contractAddress, setContractAddress] = useState(defaultContract);
   const [serviceName, setServiceName] = useState("private-api-access");
   const [price, setPrice] = useState("0.01");
   const [nonce, setNonce] = useState("demo-001");
+  const [expectedVendor, setExpectedVendor] = useState(ZeroAddress);
+  const [deadlineSeconds, setDeadlineSeconds] = useState("300");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [status, setStatus] = useState("Idle");
   const [error, setError] = useState<string | null>(null);
@@ -36,11 +39,11 @@ export function CreateIntentForm() {
     setStatus("Connecting wallet");
 
     try {
-      const activeProvider = provider ?? (await connectWallet());
-      const signer = await activeProvider.getSigner();
+      const activeSigner = signer ?? (await connectWallet()).getSigner();
+      const deadline = Math.floor(Date.now() / 1000) + Number(deadlineSeconds);
 
       setStatus("Awaiting wallet confirmation");
-      const tx = await createIntent(contractAddress, signer, intentHash, price);
+      const tx = await createIntent(contractAddress, await activeSigner, intentHash, price, deadline, expectedVendor);
 
       setTxHash(tx.hash);
       setStatus("Transaction sent");
@@ -85,6 +88,18 @@ export function CreateIntentForm() {
             <span>Price in ETH</span>
             <input value={price} onChange={(event) => setPrice(event.target.value)} inputMode="decimal" required />
           </label>
+
+          <div className="form-grid two-column">
+            <label>
+              <span>Expected vendor</span>
+              <input value={expectedVendor} onChange={(event) => setExpectedVendor(event.target.value)} placeholder="0x000..." required />
+            </label>
+
+            <label>
+              <span>Refund delay (seconds)</span>
+              <input value={deadlineSeconds} onChange={(event) => setDeadlineSeconds(event.target.value)} inputMode="numeric" min="1" required />
+            </label>
+          </div>
 
           <div className="output-card">
             <span>Generated intent hash</span>

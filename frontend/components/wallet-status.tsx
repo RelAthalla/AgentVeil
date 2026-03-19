@@ -1,5 +1,7 @@
 "use client";
 
+import { ConnectButton } from "@xellar/kit";
+
 import { useWallet } from "@/components/wallet-provider";
 
 function shortenAddress(address: string) {
@@ -7,19 +9,36 @@ function shortenAddress(address: string) {
 }
 
 export function WalletStatus() {
-  const { address, connectWallet, error, status } = useWallet();
+  const { address, authProvider, error, status, userEmail } = useWallet();
 
   return (
-    <div className="wallet-panel">
-      <div>
-        <span className="wallet-label">Wallet</span>
-        <strong>{address ? shortenAddress(address) : "Not connected"}</strong>
-        {error ? <p className="inline-error">{error}</p> : null}
-      </div>
+    <ConnectButton.Custom>
+      {({ disconnect, isConnected, openConnectModal, openProfileModal }) => (
+        <div className="wallet-panel">
+          <div>
+            <span className="wallet-label">Wallet</span>
+            <strong>{address ? shortenAddress(address) : "Not connected"}</strong>
+            {userEmail ? <p>{userEmail}</p> : null}
+            {authProvider ? <p>Auth via {authProvider}</p> : null}
+            {error ? <p className="inline-error">{error}</p> : null}
+          </div>
 
-      <button className="primary-button" type="button" onClick={() => void connectWallet()}>
-        {status === "connecting" ? "Connecting..." : address ? "Reconnect" : "Connect Wallet"}
-      </button>
-    </div>
+          {isConnected ? (
+            <div style={{ display: "flex", gap: "0.75rem" }}>
+              <button className="primary-button" type="button" onClick={openProfileModal}>
+                Profile
+              </button>
+              <button className="primary-button" type="button" onClick={disconnect}>
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <button className="primary-button" type="button" onClick={openConnectModal}>
+              {status === "connecting" ? "Connecting..." : "Connect With Xellar"}
+            </button>
+          )}
+        </div>
+      )}
+    </ConnectButton.Custom>
   );
 }

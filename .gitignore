@@ -2,5 +2,7 @@
 /out
 /broadcast
 /.env
+frontend/.env.local
+frontend/.next
 /.DS_Store
 node_modules

@@ -4,7 +4,7 @@ import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 
 import "./globals.css";
 import { SiteShell } from "@/components/site-shell";
-import { WalletProvider } from "@/components/wallet-provider";
+import { Web3Provider } from "@/components/web3-provider";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -26,9 +26,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
   return (
     <html lang="en">
       <body className={`${spaceGrotesk.variable} ${plexMono.variable}`}>
-        <WalletProvider>
+        <Web3Provider>
           <SiteShell>{children}</SiteShell>
-        </WalletProvider>
+        </Web3Provider>
       </body>
     </html>
   );

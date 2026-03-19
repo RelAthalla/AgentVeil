@@ -3,39 +3,56 @@ import {
   Contract,
   JsonRpcProvider,
   ZeroAddress,
+  AbiCoder,
   formatEther,
   isAddress,
   isHexString,
   keccak256,
+  parseUnits,
   parseEther,
-  toUtf8Bytes,
   type ContractRunner,
   type Eip1193Provider,
   type TransactionResponse,
 } from "ethers";
 
+declare global {
+  interface Window {
+    ethereum?: Eip1193Provider;
+  }
+}
+
 export const AGENTPAY_ABI = [
-  "function createIntent(bytes32 intentHash) payable",
-  "function fulfillIntent(bytes32 intentHash, bytes32 proofHash)",
-  "function intents(bytes32) view returns (address buyer, uint256 amount, bytes32 intentHash, bool settled)",
+  "function createIntent(bytes32 intentHash, uint64 deadline, address expectedVendor) payable",
+  "function fulfillIntent(bytes32 intentHash, string serviceName, uint256 quotedPriceWei, string secretNonce)",
+  "function getIntent(bytes32 intentHash) view returns ((address buyer, address expectedVendor, uint256 amount, uint64 createdAt, uint64 deadline, bytes32 intentHash, uint8 status))",
 ] as const;
 
 export type IntentRecord = {
   buyer: string;
+  expectedVendor: string;
   amountWei: string;
   amountEth: string;
+  createdAt: number;
+  deadline: number;
   intentHash: string;
-  settled: boolean;
+  status: number;
   exists: boolean;
+  settled: boolean;
   statusLabel: string;
 };
 
 export function buildIntentHash(serviceName: string, price: string, nonce: string) {
-  return keccak256(toUtf8Bytes(`${serviceName}${price}${nonce}`));
+  const quotedPriceWei = parseUnits(price, 18);
+  const payload = AbiCoder.defaultAbiCoder().encode(
+    ["string", "uint256", "string"],
+    [serviceName, quotedPriceWei, nonce],
+  );
+
+  return keccak256(payload);
 }
 
-export function buildProofHash(intentHash: string) {
-  return normalizeIntentHash(intentHash);
+export function toQuotedPriceWei(price: string) {
+  return parseUnits(price, 18);
 }
 
 export function normalizeIntentHash(intentHash: string) {
@@ -69,9 +86,11 @@ export async function createIntent(
   runner: ContractRunner,
   intentHash: string,
   valueEth: string,
+  deadline: number,
+  expectedVendor: string,
 ): Promise<TransactionResponse> {
   const contract = getWriteContract(contractAddress, runner);
-  return contract.createIntent(normalizeIntentHash(intentHash), {
+  return contract.createIntent(normalizeIntentHash(intentHash), deadline, validateContractAddress(expectedVendor), {
     value: parseEther(valueEth),
   });
 }
@@ -80,10 +99,12 @@ export async function fulfillIntent(
   contractAddress: string,
   runner: ContractRunner,
   intentHash: string,
-  proofHash: string,
+  serviceName: string,
+  quotedPriceWei: bigint,
+  secretNonce: string,
 ): Promise<TransactionResponse> {
   const contract = getWriteContract(contractAddress, runner);
-  return contract.fulfillIntent(normalizeIntentHash(intentHash), normalizeIntentHash(proofHash));
+  return contract.fulfillIntent(normalizeIntentHash(intentHash), serviceName, quotedPriceWei, secretNonce);
 }
 
 export function getExplorerProvider(): BrowserProvider | JsonRpcProvider {
@@ -107,21 +128,31 @@ export async function getIntent(
 ): Promise<IntentRecord> {
   const contract = getReadContract(contractAddress, provider);
   const normalizedHash = normalizeIntentHash(intentHash);
-  const intent = await contract.intents(normalizedHash);
+  const intent = await contract.getIntent(normalizedHash);
 
   const buyer = String(intent.buyer);
+  const expectedVendor = String(intent.expectedVendor);
   const amount = BigInt(intent.amount);
-  const settled = Boolean(intent.settled);
+  const createdAt = Number(intent.createdAt);
+  const deadline = Number(intent.deadline);
+  const status = Number(intent.status);
   const exists = buyer !== ZeroAddress;
+  const settled = exists && status === 2;
+  const statusLabel =
+    !exists ? "Missing" : status === 1 ? "Active" : status === 2 ? "Settled" : status === 3 ? "Refunded" : "Unknown";
 
   return {
     buyer,
+    expectedVendor,
     amountWei: amount.toString(),
     amountEth: formatEther(amount),
+    createdAt,
+    deadline,
     intentHash: String(intent.intentHash),
-    settled,
+    status,
     exists,
-    statusLabel: !exists ? "Missing" : settled ? "Settled" : "Open",
+    settled,
+    statusLabel,
   };
 }
 
