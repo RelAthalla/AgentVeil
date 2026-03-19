@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test} from "forge-std/Test.sol";
-import {AgentPay} from "../contracts/AgentPay.sol";
-import {IIntentVerifier} from "../contracts/IIntentVerifier.sol";
+import { Test } from "forge-std/Test.sol";
+import { AgentPay } from "../contracts/AgentPay.sol";
+import { IIntentVerifier } from "../contracts/IIntentVerifier.sol";
 
 contract MockIntentVerifier is IIntentVerifier {
     function verify(
@@ -43,7 +43,7 @@ contract AgentPayTest is Test {
         uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
 
         AgentPay.Intent memory intent = agentPay.getIntent(intentHash);
         assertEq(intent.buyer, BUYER, "buyer mismatch");
@@ -61,7 +61,7 @@ contract AgentPayTest is Test {
 
         vm.prank(BUYER);
         vm.expectRevert(AgentPay.InvalidAmount.selector);
-        agentPay.createIntent{value: 0}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: 0 }(intentHash, deadline, VENDOR);
     }
 
     function testRejectsDuplicateIntentHash() public {
@@ -69,11 +69,11 @@ contract AgentPayTest is Test {
         uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
 
         vm.prank(BUYER);
         vm.expectRevert(AgentPay.IntentAlreadyExists.selector);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
     }
 
     function testFulfillsIntentAndReleasesFundsToBoundVendor() public {
@@ -82,7 +82,7 @@ contract AgentPayTest is Test {
         uint256 vendorBalanceBefore = VENDOR.balance;
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
 
         vm.prank(VENDOR);
         agentPay.fulfillIntent(intentHash, SERVICE_NAME, PRICE, SECRET_NONCE);
@@ -99,12 +99,14 @@ contract AgentPayTest is Test {
         uint256 vendorBalanceBefore = OTHER_VENDOR.balance;
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, address(0));
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, address(0));
 
         vm.prank(OTHER_VENDOR);
         agentPay.fulfillIntent(intentHash, SERVICE_NAME, PRICE, SECRET_NONCE);
 
-        assertEq(OTHER_VENDOR.balance, vendorBalanceBefore + PRICE, "open intent should pay fulfiller");
+        assertEq(
+            OTHER_VENDOR.balance, vendorBalanceBefore + PRICE, "open intent should pay fulfiller"
+        );
     }
 
     function testRejectsInvalidProofData() public {
@@ -112,7 +114,7 @@ contract AgentPayTest is Test {
         uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
 
         vm.prank(VENDOR);
         vm.expectRevert(AgentPay.InvalidProof.selector);
@@ -124,7 +126,7 @@ contract AgentPayTest is Test {
         uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
 
         vm.prank(VENDOR);
         vm.expectRevert(AgentPay.AmountMismatch.selector);
@@ -136,7 +138,7 @@ contract AgentPayTest is Test {
         uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
 
         vm.prank(OTHER_VENDOR);
         vm.expectRevert(AgentPay.UnauthorizedVendor.selector);
@@ -154,7 +156,7 @@ contract AgentPayTest is Test {
         uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
 
         vm.prank(BUYER);
         vm.expectRevert(AgentPay.RefundUnavailable.selector);
@@ -167,7 +169,7 @@ contract AgentPayTest is Test {
         uint256 buyerBalanceBefore = BUYER.balance;
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
 
         vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
 
@@ -185,7 +187,7 @@ contract AgentPayTest is Test {
         uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
 
         vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
 
@@ -202,7 +204,7 @@ contract AgentPayTest is Test {
         uint64 deadline = uint64(block.timestamp + DEADLINE_OFFSET);
 
         vm.prank(BUYER);
-        agentPay.createIntent{value: PRICE}(intentHash, deadline, VENDOR);
+        agentPay.createIntent{ value: PRICE }(intentHash, deadline, VENDOR);
 
         vm.warp(block.timestamp + DEADLINE_OFFSET + 1);
 

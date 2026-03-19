@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IIntentVerifier} from "./IIntentVerifier.sol";
+import { IIntentVerifier } from "./IIntentVerifier.sol";
 
 /// @title AgentPay private intent escrow
 /// @notice Locks buyer funds against a private commitment and releases them after verifier approval.
@@ -41,10 +41,7 @@ contract AgentPay {
         uint64 settledAt
     );
     event IntentRefunded(
-        bytes32 indexed intentHash,
-        address indexed buyer,
-        uint256 amount,
-        uint64 refundedAt
+        bytes32 indexed intentHash, address indexed buyer, uint256 amount, uint64 refundedAt
     );
 
     error InvalidVerifier();
@@ -71,7 +68,10 @@ contract AgentPay {
     /// @param intentHash Commitment hash computed off-chain from the service metadata.
     /// @param deadline Unix timestamp after which the buyer may refund if unsettled.
     /// @param expectedVendor Optional vendor binding. Use address(0) for open fulfillment.
-    function createIntent(bytes32 intentHash, uint64 deadline, address expectedVendor) external payable {
+    function createIntent(bytes32 intentHash, uint64 deadline, address expectedVendor)
+        external
+        payable
+    {
         if (intentHash == bytes32(0)) revert InvalidIntentHash();
         if (msg.value == 0) revert InvalidAmount();
         if (deadline <= block.timestamp) revert InvalidDeadline();
@@ -114,7 +114,7 @@ contract AgentPay {
         intent.amount = 0;
         intent.status = IntentStatus.Settled;
 
-        (bool success, ) = payable(msg.sender).call{value: payout}("");
+        (bool success,) = payable(msg.sender).call{ value: payout }("");
         if (!success) revert TransferFailed();
 
         emit IntentSettled(intentHash, intent.buyer, msg.sender, payout, uint64(block.timestamp));
@@ -133,7 +133,7 @@ contract AgentPay {
         intent.amount = 0;
         intent.status = IntentStatus.Refunded;
 
-        (bool success, ) = payable(intent.buyer).call{value: refundAmount}("");
+        (bool success,) = payable(intent.buyer).call{ value: refundAmount }("");
         if (!success) revert TransferFailed();
 
         emit IntentRefunded(intentHash, intent.buyer, refundAmount, uint64(block.timestamp));
