@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import { Test } from "forge-std/Test.sol";
 import { AgentPay } from "../contracts/AgentPay.sol";
 import { IIntentVerifier } from "../contracts/IIntentVerifier.sol";
+import { Pausable } from "../contracts/AgentPay.sol"; // or @openzeppelin/...
 
 contract MockIntentVerifier is IIntentVerifier {
     function verify(
@@ -35,7 +36,7 @@ contract AgentPayTest is Test {
         vm.deal(OTHER_VENDOR, 1 ether);
 
         verifier = new MockIntentVerifier();
-        agentPay = new AgentPay(address(verifier));
+        agentPay = new AgentPay(address(verifier), address(this));
     }
 
     function testCreatesIntentAndLocksFunds() public {
@@ -219,5 +220,15 @@ contract AgentPayTest is Test {
         string memory secretNonce
     ) internal pure returns (bytes32) {
         return keccak256(abi.encode(serviceName, quotedPriceWei, secretNonce));
+    }
+
+    function testPauseUnpause() public {
+    agentPay.pause();
+    vm.expectRevert(Pausable.EnforcedPause.selector);
+    bytes32 intentHash = _intentHash(SERVICE_NAME, PRICE, SECRET_NONCE);
+    vm.prank(BUYER);
+    agentPay.createIntent{value: PRICE }(intentHash, uint64(block.timestamp + 1 days), address(0));
+    
+    agentPay.unpause();
     }
 }

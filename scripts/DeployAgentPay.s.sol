@@ -11,10 +11,12 @@ contract DeployAgentPay is Script {
         address verifierAddress = vm.envAddress("VERIFIER_ADDRESS");
 
         vm.startBroadcast(deployerPrivateKey);
-        deployedAgentPay = new AgentPay(verifierAddress);
+        deployedAgentPay = new AgentPay(verifierAddress, msg.sender);
         vm.stopBroadcast();
 
         console2.log("Using verifier at", verifierAddress);
         console2.log("AgentPay deployed at", address(deployedAgentPay));
+        console2.log("Owner is", deployedAgentPay.owner());
+        return deployedAgentPay;
     }
 }
