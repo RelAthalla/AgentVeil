@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Config, WagmiProvider } from "wagmi";
 import { XellarKitProvider, darkTheme, defaultConfig } from "@xellar/kit";
@@ -29,9 +28,9 @@ const config = defaultConfig({
   chains: [polkadotHubTestnet],
 }) as Config;
 
-export function Web3Provider({ children }: { children: ReactNode }) {
-  const queryClient = useMemo(() => new QueryClient(), []);
+const queryClient = new QueryClient();
 
+export function Web3Provider({ children }: { children: ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
