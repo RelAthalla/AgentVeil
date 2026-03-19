@@ -18,7 +18,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgentPay Shield",
+  title: "AgentVeil",
   description: "Private intent creation and settlement frontend for AgentPay.",
 };
 

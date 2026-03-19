@@ -15,7 +15,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <header className="site-header panel glass-panel">
         <div>
           <Link href="/" className="brand-mark">
-            AgentPay Shield
+            AgentVeil
           </Link>
           <p className="brand-copy">Polkadot-ready private intent settlement for autonomous agents.</p>
         </div>

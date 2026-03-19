@@ -25,7 +25,7 @@ export default function HomePage() {
   return (
     <section className="hero-grid">
       <div className="hero-copy panel glass-panel">
-        <span className="eyebrow">AgentPay Shield</span>
+        <span className="eyebrow">AgentVeil</span>
         <h1>Private agent payments with a cleaner operator workflow.</h1>
         <p>
           This frontend wraps the AgentPay contract into three practical flows so a buyer and a
