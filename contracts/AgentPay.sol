@@ -2,10 +2,14 @@
 pragma solidity ^0.8.24;
 
 import { IIntentVerifier } from "./IIntentVerifier.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @title AgentPay private intent escrow
 /// @notice Locks buyer funds against a private commitment and releases them after verifier approval.
-contract AgentPay {
+/// @dev Secured with OpenZeppelin Ownable, ReentrancyGuard, Pausable for production security.
+contract AgentPay is Ownable, ReentrancyGuard, Pausable {
     enum IntentStatus {
         None,
         Active,
@@ -23,7 +27,7 @@ contract AgentPay {
         IntentStatus status;
     }
 
-    IIntentVerifier public immutable verifier;
+    IIntentVerifier public immutable VERIFIER;
     mapping(bytes32 => Intent) private intents;
 
     event IntentCreated(
@@ -59,18 +63,17 @@ contract AgentPay {
     error AmountMismatch();
     error TransferFailed();
 
-    constructor(address verifierAddress) {
+    constructor(address verifierAddress, address initialOwner) Ownable(initialOwner) {
         if (verifierAddress == address(0)) revert InvalidVerifier();
-        verifier = IIntentVerifier(verifierAddress);
+        VERIFIER = IIntentVerifier(verifierAddress);
     }
 
     /// @notice Creates a private intent commitment and locks native funds in escrow.
-    /// @param intentHash Commitment hash computed off-chain from the service metadata.
-    /// @param deadline Unix timestamp after which the buyer may refund if unsettled.
-    /// @param expectedVendor Optional vendor binding. Use address(0) for open fulfillment.
     function createIntent(bytes32 intentHash, uint64 deadline, address expectedVendor)
         external
         payable
+        whenNotPaused
+        nonReentrant
     {
         if (intentHash == bytes32(0)) revert InvalidIntentHash();
         if (msg.value == 0) revert InvalidAmount();
@@ -96,7 +99,7 @@ contract AgentPay {
         string calldata serviceName,
         uint256 quotedPriceWei,
         string calldata secretNonce
-    ) external {
+    ) external whenNotPaused nonReentrant {
         Intent storage intent = intents[intentHash];
 
         if (intent.buyer == address(0)) revert IntentNotFound();
@@ -106,7 +109,7 @@ contract AgentPay {
             revert UnauthorizedVendor();
         }
         if (quotedPriceWei != intent.amount) revert AmountMismatch();
-        if (!verifier.verify(intent.intentHash, serviceName, quotedPriceWei, secretNonce)) {
+        if (!VERIFIER.verify(intent.intentHash, serviceName, quotedPriceWei, secretNonce)) {
             revert InvalidProof();
         }
 
@@ -121,7 +124,7 @@ contract AgentPay {
     }
 
     /// @notice Refunds an expired unsettled intent back to the buyer.
-    function refundIntent(bytes32 intentHash) external {
+    function refundIntent(bytes32 intentHash) external whenNotPaused nonReentrant {
         Intent storage intent = intents[intentHash];
 
         if (intent.buyer == address(0)) revert IntentNotFound();
@@ -137,6 +140,16 @@ contract AgentPay {
         if (!success) revert TransferFailed();
 
         emit IntentRefunded(intentHash, intent.buyer, refundAmount, uint64(block.timestamp));
+    }
+
+    /// @notice Owner can pause contract for emergency.
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /// @notice Owner can unpause.
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     function getIntent(bytes32 intentHash) external view returns (Intent memory) {
