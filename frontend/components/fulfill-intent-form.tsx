@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { useWallet } from "@/components/wallet-provider";
-import { buildIntentHash, fulfillIntent, toQuotedPriceWei } from "@/lib/agentpay";
+import { buildIntentHash, fulfillIntent, parseAgentPayError, toQuotedPriceWei } from "@/lib/agentpay";
 
 const defaultContract = process.env.NEXT_PUBLIC_AGENTPAY_ADDRESS ?? "";
 
@@ -17,6 +17,7 @@ export function FulfillIntentForm() {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [status, setStatus] = useState("Idle");
   const [error, setError] = useState<string | null>(null);
+
   const recomputedIntentHash = useMemo(() => {
     if (!serviceName || !price || !nonce) {
       return "";
@@ -29,6 +30,8 @@ export function FulfillIntentForm() {
     }
   }, [nonce, price, serviceName]);
 
+  const hashMatches = intentHash.trim().toLowerCase() === recomputedIntentHash.toLowerCase();
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -36,6 +39,10 @@ export function FulfillIntentForm() {
     setStatus("Connecting wallet");
 
     try {
+      if (!hashMatches) {
+        throw new Error("Intent hash does not match the revealed service, price, and nonce.");
+      }
+
       const activeSigner = signer ?? (await connectWallet()).getSigner();
 
       setStatus("Awaiting wallet confirmation");
@@ -53,20 +60,19 @@ export function FulfillIntentForm() {
       await tx.wait();
       setStatus("Vendor payment received");
     } catch (submissionError) {
-      const message = submissionError instanceof Error ? submissionError.message : "Intent fulfillment failed.";
       setStatus("Failed");
-      setError(message);
+      setError(parseAgentPayError(submissionError, "Intent fulfillment failed."));
     }
   };
 
   return (
-    <section className="page-grid">
-      <div className="panel glass-panel">
-        <span className="eyebrow">Vendor Flow</span>
+    <section className="flow-layout">
+      <div className="shell-card flow-panel">
+        <span className="section-tag">Vendor Flow</span>
         <h1>Fulfill Intent</h1>
         <p>
-          The vendor reveals the original preimage so the verifier contract can confirm it matches
-          the buyer&apos;s on-chain commitment hash.
+          Reveal the original preimage so the stored commitment can be checked and the escrow can be
+          released to the fulfiller.
         </p>
 
         <form className="flow-form" onSubmit={handleSubmit}>
@@ -97,25 +103,45 @@ export function FulfillIntentForm() {
             <input value={price} onChange={(event) => setPrice(event.target.value)} inputMode="decimal" required />
           </label>
 
-          <div className="output-card">
-            <span>Recomputed intent hash</span>
-            <code>{recomputedIntentHash || "Fill the form to derive the revealed preimage hash."}</code>
-          </div>
+          <label>
+            <span>Secret preimage</span>
+            <input value={nonce} onChange={(event) => setNonce(event.target.value)} placeholder="Enter secret preimage..." required />
+          </label>
 
-          <button className="primary-button" type="submit">
-            Fulfill Intent
+          <button className="primary-button submit-button" type="submit">
+            Submit Settlement Proof
           </button>
         </form>
       </div>
 
-      <aside className="panel side-panel">
-        <h2>Settlement status</h2>
-        <div className="status-pill">{status}</div>
-        <div className="stacked-output">
-          <span>Latest transaction hash</span>
-          <code>{txHash ?? "No settlement transaction submitted yet."}</code>
+      <aside className="sidebar-stack">
+        <div className="shell-card side-card">
+          <div className="side-header">
+            <h2>Settlement status</h2>
+            <span className="status-pill">{status}</span>
+          </div>
+          <div className="detail-box">
+            <span>Latest transaction hash</span>
+            <code>{txHash ?? "No settlement transaction submitted yet."}</code>
+          </div>
+          <div className="detail-box">
+            <span>Recomputed intent hash</span>
+            <code>{recomputedIntentHash || "Fill the form to derive the matching reveal hash."}</code>
+          </div>
+          <div className="detail-box">
+            <span>Preflight validation</span>
+            <strong>{hashMatches ? "Intent hash matches the revealed preimage." : "Intent hash does not match yet."}</strong>
+          </div>
+          {error ? <p className="inline-error">{error}</p> : null}
         </div>
-        {error ? <p className="inline-error">{error}</p> : null}
+
+        <div className="shell-card side-card success-card">
+          <h2>How settlement works</h2>
+          <p>
+            The preimage is hashed client-side and compared against the on-chain commitment. Only the
+            matching preimage unlocks the escrowed funds.
+          </p>
+        </div>
       </aside>
     </section>
   );

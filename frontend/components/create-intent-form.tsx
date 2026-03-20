@@ -4,9 +4,16 @@ import { useMemo, useState } from "react";
 import { ZeroAddress } from "ethers";
 
 import { useWallet } from "@/components/wallet-provider";
-import { buildIntentHash, createIntent } from "@/lib/agentpay";
+import { buildIntentHash, createIntent, parseAgentPayError } from "@/lib/agentpay";
 
 const defaultContract = process.env.NEXT_PUBLIC_AGENTPAY_ADDRESS ?? "";
+
+function formatTimestamp(timestampSeconds: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(timestampSeconds * 1000);
+}
 
 export function CreateIntentForm() {
   const { connectWallet, signer } = useWallet();
@@ -15,7 +22,7 @@ export function CreateIntentForm() {
   const [price, setPrice] = useState("0.01");
   const [nonce, setNonce] = useState("demo-001");
   const [expectedVendor, setExpectedVendor] = useState(ZeroAddress);
-  const [deadlineSeconds, setDeadlineSeconds] = useState("300");
+  const [deadlineSeconds, setDeadlineSeconds] = useState("3600");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [status, setStatus] = useState("Idle");
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +38,15 @@ export function CreateIntentForm() {
       return "";
     }
   }, [nonce, price, serviceName]);
+
+  const deadlinePreview = useMemo(() => {
+    const seconds = Number(deadlineSeconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      return null;
+    }
+
+    return Math.floor(Date.now() / 1000) + seconds;
+  }, [deadlineSeconds]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -50,20 +66,19 @@ export function CreateIntentForm() {
       await tx.wait();
       setStatus("Intent confirmed on-chain");
     } catch (submissionError) {
-      const message = submissionError instanceof Error ? submissionError.message : "Intent creation failed.";
       setStatus("Failed");
-      setError(message);
+      setError(parseAgentPayError(submissionError, "Intent creation failed."));
     }
   };
 
   return (
-    <section className="page-grid">
-      <div className="panel glass-panel">
-        <span className="eyebrow">Buyer Flow</span>
+    <section className="flow-layout">
+      <div className="shell-card flow-panel">
+        <span className="section-tag">Buyer Flow</span>
         <h1>Create Intent</h1>
         <p>
-          The buyer generates a commitment locally, locks ETH in escrow, and publishes only the
-          intent hash to the contract.
+          The buyer generates a commitment locally, locks escrow, and publishes only the intent hash
+          to the contract.
         </p>
 
         <form className="flow-form" onSubmit={handleSubmit}>
@@ -92,7 +107,7 @@ export function CreateIntentForm() {
           <div className="form-grid two-column">
             <label>
               <span>Expected vendor</span>
-              <input value={expectedVendor} onChange={(event) => setExpectedVendor(event.target.value)} placeholder="0x000..." required />
+              <input value={expectedVendor} onChange={(event) => setExpectedVendor(event.target.value)} placeholder="0x000... or zero address" required />
             </label>
 
             <label>
@@ -101,25 +116,50 @@ export function CreateIntentForm() {
             </label>
           </div>
 
-          <div className="output-card">
-            <span>Generated intent hash</span>
-            <code>{intentHash || "Fill the form to derive a hash."}</code>
-          </div>
-
-          <button className="primary-button" type="submit">
-            Create Intent
+          <button className="primary-button submit-button" type="submit">
+            Lock Escrow & Submit Intent
           </button>
         </form>
       </div>
 
-      <aside className="panel side-panel">
-        <h2>Transaction status</h2>
-        <div className="status-pill">{status}</div>
-        <div className="stacked-output">
-          <span>Latest transaction hash</span>
-          <code>{txHash ?? "No transaction submitted yet."}</code>
+      <aside className="sidebar-stack">
+        <div className="shell-card side-card">
+          <div className="side-header">
+            <h2>Transaction status</h2>
+            <span className="status-pill">{status}</span>
+          </div>
+          <div className="detail-box">
+            <span>Latest transaction hash</span>
+            <code>{txHash ?? "No transaction submitted yet."}</code>
+          </div>
+          <div className="detail-box">
+            <span>Generated intent hash</span>
+            <code>{intentHash || "Fill the form to derive a commitment hash."}</code>
+          </div>
+          <div className="detail-box">
+            <span>Expected expiry</span>
+            <code>{deadlinePreview ? formatTimestamp(deadlinePreview) : "Enter a positive delay in seconds."}</code>
+          </div>
+          {error ? <p className="inline-error">{error}</p> : null}
         </div>
-        {error ? <p className="inline-error">{error}</p> : null}
+
+        <div className="shell-card side-card muted-card">
+          <h2>Flow steps</h2>
+          <ol className="step-list">
+            <li>
+              <strong>Generate commitment</strong>
+              <span>Hash the secret preimage locally in the browser.</span>
+            </li>
+            <li>
+              <strong>Lock escrow</strong>
+              <span>Send funds into the AgentPay contract.</span>
+            </li>
+            <li>
+              <strong>Publish intent hash</strong>
+              <span>Store only the public commitment on-chain.</span>
+            </li>
+          </ol>
+        </div>
       </aside>
     </section>
   );
