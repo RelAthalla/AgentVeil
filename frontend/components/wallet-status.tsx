@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ConnectButton } from "@xellar/kit";
 
 import { useWallet } from "@/components/wallet-provider";
@@ -9,36 +10,39 @@ function shortenAddress(address: string) {
 }
 
 export function WalletStatus() {
-  const { address, authProvider, error, status, userEmail } = useWallet();
+  const { address, error, status } = useWallet();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <ConnectButton.Custom>
-      {({ disconnect, isConnected, openConnectModal, openProfileModal }) => (
-        <div className="wallet-panel">
-          <div>
-            <span className="wallet-label">Wallet</span>
-            <strong>{address ? shortenAddress(address) : "Not connected"}</strong>
-            {userEmail ? <p>{userEmail}</p> : null}
-            {authProvider ? <p>Auth via {authProvider}</p> : null}
-            {error ? <p className="inline-error">{error}</p> : null}
-          </div>
+      {({ disconnect, isConnected, openConnectModal, openProfileModal }) => {
+        const visibleAddress = mounted && address ? shortenAddress(address) : "Not connected";
 
-          {isConnected ? (
-            <div style={{ display: "flex", gap: "0.75rem" }}>
-              <button className="primary-button" type="button" onClick={openProfileModal}>
-                Profile
+        return (
+          <div className="wallet-panel">
+            <div className="address-chip">{visibleAddress}</div>
+            {isConnected ? (
+              <>
+                <button className="primary-button small" type="button" onClick={openProfileModal}>
+                  Profile
+                </button>
+                <button className="secondary-button small" type="button" onClick={disconnect}>
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <button className="primary-button small" type="button" onClick={openConnectModal}>
+                {status === "connecting" ? "Connecting..." : "Connect"}
               </button>
-              <button className="primary-button" type="button" onClick={disconnect}>
-                Disconnect
-              </button>
-            </div>
-          ) : (
-            <button className="primary-button" type="button" onClick={openConnectModal}>
-              {status === "connecting" ? "Connecting..." : "Connect With Xellar"}
-            </button>
-          )}
-        </div>
-      )}
+            )}
+            {error ? <p className="inline-error wallet-error">{error}</p> : null}
+          </div>
+        );
+      }}
     </ConnectButton.Custom>
   );
 }
