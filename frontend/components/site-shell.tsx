@@ -7,10 +7,10 @@ import { usePathname } from "next/navigation";
 import { WalletStatus } from "@/components/wallet-status";
 
 const navLinks = [
-  { href: "/create-intent", label: "Create Intent" },
-  { href: "/fulfill-intent", label: "Fulfill Intent" },
-  { href: "/intent-explorer", label: "Intent Explorer" },
-  { href: "/refund-intent", label: "Refund Intent" },
+  { href: "/create-intent", label: "Create" },
+  { href: "/fulfill-intent", label: "Fulfill" },
+  { href: "/intent-explorer", label: "Explorer" },
+  { href: "/refund-intent", label: "Refund" },
 ];
 
 export function SiteShell({ children }: { children: ReactNode }) {
@@ -23,7 +23,6 @@ export function SiteShell({ children }: { children: ReactNode }) {
           <span className="brand-badge">AV</span>
           <span>
             <strong>AgentVeil</strong>
-            <small>Private intent settlement</small>
           </span>
         </Link>
 
@@ -31,7 +30,11 @@ export function SiteShell({ children }: { children: ReactNode }) {
           {navLinks.map((link) => {
             const isActive = pathname === link.href;
             return (
-              <Link key={link.href} href={link.href} className={`nav-link${isActive ? " active" : ""}`}>
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`nav-link${isActive ? " active" : ""}`}
+              >
                 {link.label}
               </Link>
             );

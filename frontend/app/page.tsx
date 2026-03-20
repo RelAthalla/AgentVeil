@@ -4,25 +4,25 @@ const pages = [
   {
     href: "/create-intent",
     title: "Create Intent",
-    body: "Generate a private commitment, lock escrow, and submit the intent from your wallet.",
+    body: "Generate a private commitment, lock escrow, and submit from your wallet.",
     accent: "Escrow",
   },
   {
     href: "/fulfill-intent",
     title: "Fulfill Intent",
-    body: "Act as the vendor, reveal the original preimage, and receive the escrowed payout.",
+    body: "Reveal the original preimage and receive the escrowed payout.",
     accent: "Settlement",
   },
   {
     href: "/intent-explorer",
     title: "Intent Explorer",
-    body: "Query public commitment state, inspect escrow, and check whether settlement already happened.",
-    accent: "Read Flow",
+    body: "Query commitment state, inspect escrow, and check settlement status.",
+    accent: "Read",
   },
   {
     href: "/refund-intent",
     title: "Refund Intent",
-    body: "Return escrow to the buyer after the deadline if settlement never happened.",
+    body: "Return escrow to buyer after deadline if settlement never happened.",
     accent: "Recovery",
   },
 ];
@@ -31,11 +31,11 @@ export default function HomePage() {
   return (
     <section className="hero-layout">
       <div className="shell-card hero-panel">
-        <span className="section-tag">Polkadot-ready infrastructure</span>
-        <h1>Private agent payments with a cleaner operator workflow.</h1>
+        <span className="section-tag">Polkadot Infrastructure</span>
+        <h1>Private agent payments, simplified.</h1>
         <p>
-          This frontend wraps the AgentPay contract into practical flows so a buyer and a vendor can
-          move from commitment creation to settlement and refund without dropping into raw calldata.
+          Wrap the AgentPay contract into practical flows. Move from commitment to settlement
+          without raw calldata.
         </p>
 
         <div className="hero-actions">
@@ -43,14 +43,14 @@ export default function HomePage() {
             Create Intent
           </Link>
           <Link href="/intent-explorer" className="secondary-button hero-link">
-            Explore Intents
+            Explore
           </Link>
         </div>
 
         <div className="hero-stats">
           <div>
             <strong>4</strong>
-            <span>Practical Flows</span>
+            <span>Flows</span>
           </div>
           <div>
             <strong>0%</strong>
@@ -58,7 +58,7 @@ export default function HomePage() {
           </div>
           <div>
             <strong>E2E</strong>
-            <span>Operator Workflow</span>
+            <span>Workflow</span>
           </div>
         </div>
       </div>

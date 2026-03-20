@@ -1,17 +1,17 @@
 import type { ReactNode } from "react";
-import type { Metadata } from "next";
-import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 
 import "./globals.css";
 import { SiteShell } from "@/components/site-shell";
 import { Web3Provider } from "@/components/web3-provider";
 
-const spaceGrotesk = Space_Grotesk({
+const inter = Inter({
   subsets: ["latin"],
   variable: "--font-display",
 });
 
-const plexMono = IBM_Plex_Mono({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
   variable: "--font-mono",
@@ -19,13 +19,19 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "AgentVeil",
-  description: "Private intent creation and settlement frontend for AgentPay.",
+  description: "Private intent creation and settlement for Polkadot.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0b",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${spaceGrotesk.variable} ${plexMono.variable}`}>
+      <body className={`${inter.variable} ${jetbrainsMono.variable}`}>
         <Web3Provider>
           <SiteShell>{children}</SiteShell>
         </Web3Provider>
